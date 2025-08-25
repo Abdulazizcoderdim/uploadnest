@@ -5,6 +5,8 @@ import express from "express";
 import helmet from "helmet";
 import passport from "passport";
 import { Env } from "./config/env.config";
+import { HTTPSTATUS } from "./config/http.config";
+import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { UnauthorizedException } from "./utils/app-error";
 
 const app = express();
@@ -33,4 +35,13 @@ app.use(helmet());
 app.use(passport.initialize());
 
 // Routes
-app.get("/", asyncHandler);
+app.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    res.status(HTTPSTATUS.OK).json({
+      message: "Hello Subscribe to the channel",
+    });
+  })
+);
+
+app.use(`${Env.BASE_PATH}`, internalRou);
