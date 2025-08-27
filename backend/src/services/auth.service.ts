@@ -2,8 +2,12 @@ import mongoose from "mongoose";
 import StorageModel from "../models/storage.model";
 import UserModel from "../models/user.model";
 import { UnauthorizedException } from "../utils/app-error";
+import { signJwtToken } from "../utils/jwt";
 import { logger } from "../utils/logger";
-import { RegisterSchemaType } from "../validators/auth.validator";
+import {
+  LoginSchemaType,
+  RegisterSchemaType,
+} from "../validators/auth.validator";
 
 export const registerService = async (body: RegisterSchemaType) => {
   const { email } = body;
@@ -35,4 +39,25 @@ export const registerService = async (body: RegisterSchemaType) => {
   } finally {
     await session.endSession();
   }
+};
+
+export const loginService = async (body: LoginSchemaType) => {
+  const { email, password } = body;
+  const user = await UserModel.findOne({ email });
+  if (!user) throw new UnauthorizedException("Email/Password not found");
+
+  const isPasswordValid = await user.comparePassword(password);
+
+  if (!isPasswordValid)
+    throw new UnauthorizedException("Email/Password is incorrect");
+
+  const { token, expiresAt } = signJwtToken({
+    userId: user.id,
+  });
+
+  return {
+    user: user.omitPassword(),
+    accessToken: token,
+    expiresAt,
+  };
 };

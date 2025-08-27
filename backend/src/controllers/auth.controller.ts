@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { HTTPSTATUS } from "../config/http.config";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
-import { registerService } from "../services/auth.service";
-import { registerSchema } from "../validators/auth.validator";
+import { loginService, registerService } from "../services/auth.service";
+import { loginSchema, registerSchema } from "../validators/auth.validator";
 
 export const registerController = asyncHandler(
   async (req: Request, res: Response) => {
@@ -12,6 +12,19 @@ export const registerController = asyncHandler(
 
     return res.status(HTTPSTATUS.CREATED).json({
       message: "User created successfully",
+    });
+  }
+);
+
+export const loginController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const body = loginSchema.parse(req.body);
+
+    const result = await loginService(body);
+
+    return res.status(HTTPSTATUS.CREATED).json({
+      message: `User logged in successfully`,
+      ...result,
     });
   }
 );
