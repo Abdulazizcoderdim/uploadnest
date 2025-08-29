@@ -11,7 +11,7 @@ import { PassThrough, Readable } from "stream";
 import { v4 as uuidv4 } from "uuid";
 import { s3 } from "../config/aws-s3.config";
 import { Env } from "../config/env.config";
-import { UploadSourceEnum } from "../models/file.model";
+import FileModel, { UploadSourceEnum } from "../models/file.model";
 import UserModel from "../models/user.model";
 import {
   BadRequestException,
@@ -35,9 +35,124 @@ export const uploadFilesSerice = async (
       let _storageKey: string | null = null;
 
       try {
-      } catch (error) {}
+        const { storageKey } = await uploadToS3(file, userId);
+        _storageKey = storageKey;
+        const createdFile = await FileModel.create({
+          userId,
+          storageKey,
+          originalName: file.originalname,
+          uploadVia: uploadedVia,
+          size: file.size,
+          ext: path.extname(file.originalname)?.slice(1)?.toLowerCase(),
+          url: "",
+          mimeType: file.mimetype,
+        });
+
+        return {
+          fileId: createdFile._id,
+          originalName: createdFile.originalName,
+          size: createdFile.size,
+          ext: createdFile.ext,
+          mimeType: createdFile.mimeType,
+        };
+      } catch (error) {
+        logger.error("Error uploading file", error);
+        if (_storageKey) {
+          // Delete file if upload failed
+        }
+        throw error;
+      }
     })
   );
+
+  const successfulRes = results
+    .filter((r) => r.status === "fulfilled")
+    .map((r) => r.value);
+
+  const failedRes = results
+    .filter((r) => r.status === "rejected")
+    .map((r) => r.reason.message);
+
+  if (failedRes.length > 0) {
+    logger.warn("Failed to upload files", files);
+    // throw new InternalServerException(
+    //   ` Failed to upload ${failedRes.length} out of ${files.length} files`,
+    // );
+  }
+
+  return {
+    message: `Uploaded successfully ${successfulRes.length} out of ${files.length} files`,
+    data: successfulRes,
+    failedCount: failedRes.length,
+  };
+};
+
+export const getAllFilesService = async (
+  userId: string,
+  filter: {
+    keyword?: string;
+  },
+  pagination: {
+    pageSize: number;
+    pageNumber: number;
+  }
+) => {
+  const { keyword } = filter;
+
+  const filterConditons: Record<string, any> = {
+    userId,
+  };
+
+  if (keyword) {
+    filterConditons.$or = [
+      {
+        originalName: {
+          $regex: keyword,
+          $options: "i",
+        },
+      },
+    ];
+  }
+
+  const { pageSize, pageNumber } = pagination;
+  const skip = (pageNumber - 1) * pageSize;
+
+  const [files, totalCount] = await Promise.all([
+    FileModel.find(filterConditons)
+      .skip(skip)
+      .limit(pageSize)
+      .sort({ createdAt: -1 }),
+    FileModel.countDocuments(filterConditons),
+  ]);
+
+  const filesWithUrls = await Promise.all(
+    files.map(async (file) => {
+      const url = await getFileFromS3({
+        storageKey: file.storageKey,
+        mimeType: file.mimeType,
+        expiresIn: 3600,
+      });
+
+      return {
+        ...file.toObject(),
+        url,
+        storageKey: undefined,
+      };
+    })
+  );
+
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  return {
+    files: filesWithUrls,
+    pagination: {
+      pageSize,
+      pageNumber,
+      totalCount,
+      totalPages,
+      skip,
+    },
+  };
 };
 
 async function handleMultipleFilesDownload(

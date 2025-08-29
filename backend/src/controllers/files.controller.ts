@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { HTTPSTATUS } from "../config/http.config";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { UploadSourceEnum } from "../models/file.model";
+import { uploadFilesSerice } from "../services/files.service";
 
 export const uploadFilesViaWebController = asyncHandler(
   async (req: Request, res: Response) => {
