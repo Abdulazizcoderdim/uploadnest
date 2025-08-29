@@ -4,7 +4,12 @@ import { CheckStorageAvailability } from "../../middlewares/check-storage.middle
 
 const filesRoutes = Router();
 
-filesRoutes.post("/upload", multiUpload, CheckStorageAvailability);
+filesRoutes.post(
+  "/upload",
+  multiUpload,
+  CheckStorageAvailability,
+  uploadFilesViaWebController
+);
 
 filesRoutes.post("/download");
 filesRoutes.get("/all");
