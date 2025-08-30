@@ -16,6 +16,7 @@ import UserModel from "../models/user.model";
 import {
   BadRequestException,
   InternalServerException,
+  NotFoundException,
   UnauthorizedException,
 } from "../utils/app-error";
 import { sanitizeFilename } from "../utils/helper";
@@ -152,6 +153,73 @@ export const getAllFilesService = async (
       totalPages,
       skip,
     },
+  };
+};
+
+export const deleteFilesService = async (userId: string, fileIds: string[]) => {
+  const files = await FileModel.find({
+    _id: { $in: fileIds },
+  });
+  if (!files.length) throw new NotFoundException("File not found");
+
+  const s3Errors: string[] = [];
+
+  await Promise.all(
+    files.map(async (file) => {
+      try {
+        await deleteFromS3(file.storageKey);
+      } catch (error) {
+        logger.error(`Failed to delete ${file.storageKey} from s3`, error);
+        s3Errors.push(file.storageKey);
+      }
+    })
+  );
+
+  const successfulFiledIds = files
+    .filter((file) => !s3Errors.includes(file.storageKey))
+    .map((file) => file._id);
+
+  const { deletedCount } = await FileModel.deleteMany({
+    _id: { $in: successfulFiledIds },
+    userId,
+  });
+
+  if (s3Errors.length > 0) {
+    logger.warn(`Failed to delete ${s3Errors.length} files from s3`);
+  }
+
+  return {
+    deletedCount,
+    failedCount: s3Errors.length,
+  };
+};
+
+export const downloadFilesService = async (
+  userId: string,
+  fileIds: string[]
+) => {
+  const files = await FileModel.find({
+    _id: { $in: fileIds },
+  });
+  if (!files.length) throw new NotFoundException("File not found");
+
+  if (files.length === 1) {
+    const signedUrl = await getFileFromS3({
+      storageKey: files[0].storageKey,
+      filename: files[0].originalName,
+    });
+
+    return {
+      url: signedUrl,
+      isZip: false,
+    };
+  }
+
+  const url = await handleMultipleFilesDownload(files, userId);
+
+  return {
+    url,
+    isZip: true,
   };
 };
 
