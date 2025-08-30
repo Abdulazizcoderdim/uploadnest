@@ -156,6 +156,21 @@ export const getAllFilesService = async (
   };
 };
 
+export const getFileUrlService = async (fileId: string) => {
+  const file = await FileModel.findOne({ _id: fileId });
+  if (!file) throw new NotFoundException("File not found");
+
+  // stream
+  const stream = await getS3ReadStream(file.storageKey);
+
+  return {
+    url: "",
+    stream,
+    contentType: file.mimeType,
+    fileSize: file.size,
+  };
+};
+
 export const deleteFilesService = async (userId: string, fileIds: string[]) => {
   const files = await FileModel.find({
     _id: { $in: fileIds },
